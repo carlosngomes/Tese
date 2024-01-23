@@ -1,0 +1,55 @@
+import os
+import mne
+import numpy as np
+import matplotlib.pyplot as plt
+
+path = r'D:\Tese Mestrado\EEG_Data'
+files = os.listdir(path)
+file = [item for item in files if item.endswith('set')]
+
+def epochs(file,path): #Returns 2 lists, one with correct events and other with erroneous events
+    Corr_data=[]
+    Err_data=[]
+    for i in range(len(file)):
+        Corr=[]
+        Err=[]
+        path_ = path + '\\' + file[i] 
+        data= mne.read_epochs_eeglab(path_)
+        Corr= data['proCorr','antiCorr']
+        Err= data['proErr', 'antiErr', 'nogoErr']
+        Corr_data.append(Corr)
+        Err_data.append(Err)
+    return Corr_data, Err_data
+
+def get_data(Corr_data, Err_data): #Gets the data from the events /Not used
+    C_data=[]
+    E_data=[]
+    for i in range(len(Corr_data)):
+        C_data.append(Corr_data[i].get_data())
+    for j in range(len(Err_data)):
+        E_data.append(Err_data[j].get_data())
+    return C_data, E_data
+
+#Corr_data 
+Corr_data, Err_data = epochs(file, path)
+
+index=int(len(Corr_data[0].get_data()[0, 0,:])/2) #Index number of the response moment
+
+
+pre_response_data_corr = Corr_data[0].get_data()[:, :, 0:index] #Gets the data for pre-response 
+#post_response_data_corr = Corr_data[0].get_data()[:, :, index:-1]
+
+
+#Below: Returns 2 arrays, freqs_pre_corr=[224,64,126](224 events, 64 channels, 126 ???), psds_pre_corr=[126,](126 ???)
+freqs_pre_corr, psds_pre_corr = mne.time_frequency.psd_array_multitaper(pre_response_data_corr, Corr_data[0].info['sfreq'])
+#freqs_post_corr, psds_post_corr = mne.time_frequency.psd_array_multitaper(post_response_data_corr, Corr_data[0].info['sfreq'])
+
+
+plt.figure()
+#Below: Only way to obtain a plot is using freqs_pre_Corr[0][0] in order to have same dimention as psds_pre_corr
+#Don't understand the plot
+plt.plot(freqs_pre_corr[0][0], 10 * np.log10(psds_pre_corr))
+plt.title('Mean Power Spectral Density Around Response')
+plt.xlabel('Frequency (Hz)')
+plt.ylabel('Power/Frequency (dB/Hz)')
+plt.show()

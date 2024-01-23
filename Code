@@ -36,7 +36,7 @@ Corr_data, Err_data = epochs(file, path)
 index=int(len(Corr_data[0].get_data()[0, 0,:])/2) #Index number of the response moment
 
 
-pre_response_data_corr = Corr_data[0].get_data()[:, :, 0:index] #Gets the data for pre-response 
+pre_response_data_corr = Corr_data[0].get_data()[:, :, 0:index] #Gets the data for pre-response, [224,64,250]  
 #post_response_data_corr = Corr_data[0].get_data()[:, :, index:-1]
 
 

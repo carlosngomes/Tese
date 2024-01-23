@@ -41,15 +41,18 @@ pre_response_data_corr = Corr_data[0].get_data()[:, :, 0:index] #Gets the data f
 
 
 #Below: Returns 2 arrays, freqs_pre_corr=[224,64,126](224 events, 64 channels, 126 ???), psds_pre_corr=[126,](126 ???)
+#freqs_pre_corr has values in the order of 10^-10 and I don't understand why ???
 freqs_pre_corr, psds_pre_corr = mne.time_frequency.psd_array_multitaper(pre_response_data_corr, Corr_data[0].info['sfreq'])
 #freqs_post_corr, psds_post_corr = mne.time_frequency.psd_array_multitaper(post_response_data_corr, Corr_data[0].info['sfreq'])
 
 
 plt.figure()
-#Below: Only way to obtain a plot is using freqs_pre_Corr[0][0] in order to have same dimention as psds_pre_corr
+#Below: Only way to obtain a plot is using freqs_pre_Corr[0][0] in order to have same dimension as psds_pre_corr
 #Don't understand the plot
 plt.plot(freqs_pre_corr[0][0], 10 * np.log10(psds_pre_corr))
 plt.title('Mean Power Spectral Density Around Response')
 plt.xlabel('Frequency (Hz)')
 plt.ylabel('Power/Frequency (dB/Hz)')
 plt.show()
+
+#

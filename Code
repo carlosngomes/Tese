@@ -2,57 +2,250 @@ import os
 import mne
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy.signal as signal
 
+                   ##Obtaining data##
 path = r'D:\Tese Mestrado\EEG_Data'
 files = os.listdir(path)
 file = [item for item in files if item.endswith('set')]
+fs=500
+freq_bands={'delta' : [0,4],
+            'theta' : [4,8],
+            'alpha' : [8, 13],
+            'beta' : [13,35],
+            'high' : [35, 45],
+            'all': [1.5,45]}
 
 def epochs(file,path): #Returns 2 lists, one with correct events and other with erroneous events
-    Corr_data=[]
-    Err_data=[]
+    Corr_data={}
+    Err_data={}
     for i in range(len(file)):
         Corr=[]
         Err=[]
         path_ = path + '\\' + file[i] 
         data= mne.read_epochs_eeglab(path_)
-        Corr= data['proCorr','antiCorr']
-        Err= data['proErr', 'antiErr', 'nogoErr']
-        Corr_data.append(Corr)
-        Err_data.append(Err)
-    return Corr_data, Err_data
+        channel_name_list= data.info['ch_names']
+        name= f"{file[i][0:3]}"
+        Corr= data['proCorr','antiCorr'].get_data()
+        Err= data['proErr', 'antiErr', 'nogoErr'].get_data()
+        Corr_data[name]= Corr
+        Err_data[name]= Err
+    return Corr_data, Err_data, channel_name_list
 
-def get_data(Corr_data, Err_data): #Gets the data from the events /Not used
-    C_data=[]
-    E_data=[]
-    for i in range(len(Corr_data)):
-        C_data.append(Corr_data[i].get_data())
-    for j in range(len(Err_data)):
-        E_data.append(Err_data[j].get_data())
-    return C_data, E_data
+Corr_data, Err_data, channel_name_list = epochs(file, path)
 
-#Corr_data 
-Corr_data, Err_data = epochs(file, path)
+def Corrdata(Corr_data):
+    pre_response_Corr_data={}
+    post_response_Corr_data={}
+    for subject_id, data in Corr_data.items():
+        index= int(len(data[0,0,:])/2) #250
+        
+        pre_response_Corr_data[subject_id] = data[:,:,0:index]
+        post_response_Corr_data[subject_id] = data[:,:,index:-1]
+    return pre_response_Corr_data, post_response_Corr_data
+    
+def Errdata(Err_data):
+    pre_response_Err_data={}
+    post_response_Err_data={}
+    for subject_id, data in Err_data.items():
+        index= int(len(data[0,0,:])/2) #250
+        
+        pre_response_Err_data[subject_id] = data[:,:,0:index]
+        post_response_Err_data[subject_id] = data[:,:,index:-1]
+    return pre_response_Err_data, post_response_Err_data
 
-index=int(len(Corr_data[0].get_data()[0, 0,:])/2) #Index number of the response moment
+pre_response_Corr_data, post_response_Corr_data= Corrdata(Corr_data) #Guarda os dados corretos num dicionário com a key subject_id('P01',...)
+pre_response_Err_data, post_response_Err_data= Errdata(Err_data) #Guarda os dados errados num dicionário com a key subject_id('P01',...)
+
+##############################################################
+                ###Obtaining psd###
+def getpsd(data): #Obtém PSD
+    f={}
+    S={}
+    for name, values in data.items():
+        f[name],S[name]= signal.welch(values,fs)
+    return f,S
+    
+f,S= getpsd(pre_response_Corr_data)    
+
+#Obtém os valores de psd para o número total de epochs e faz a média de todos 
+#retornando um array média para cada subject_id e para cada channel
+def getdatachannel(S,channel_name_list): 
+    mean_data_per_channel = {}
+    # Iterate over channels
+    for inc in range(64):  # Channels are indexed from 1 to 64
+        
+        for subject_id, i in S.items():
+            array = []
+            for j in range(len(i)):
+        
+                data = i[j, inc, :]  # Extract data for the current channel
+                channel_name = f"{channel_name_list[inc]}"
+                array.append(data)    
+            array = np.array(array)
+            mean_array = np.mean(array, axis=0)
+            mean_data_per_channel[subject_id,channel_name] = mean_array 
+    return mean_data_per_channel         
 
 
-pre_response_data_corr = Corr_data[0].get_data()[:, :, 0:index] #Gets the data for pre-response, [224,64,250]  
-#post_response_data_corr = Corr_data[0].get_data()[:, :, index:-1]
+mean_data_per_channel= getdatachannel(S, channel_name_list)
+
+#Melhorar a função getdatachannel de modo a tentar criar um nested dictionary. 
+#Neste momento as keys encontram-se todas separadas umas das outras em vez de separadas por subject_id
+#Formato atual: ([P01,CZ]: array)
+#Formato pretendido: ([P01]: [CZ]: array) 
+
+###################################################################################
+            ###PLOT###
+def plot(mean_data_per_channel, f):
+    
+    for mean_array in mean_data_per_channel.values():
+        plt.plot(f, np.log(mean_array))
+    
+    # Customize plot
+    plt.xlim([0, 100])
+    plt.xlabel('frequency [Hz]')
+    plt.ylabel('PSD [log(V**2/Hz)]')
+    plt.title('Mean PSD of Channels')
+    plt.legend(mean_data_per_channel.keys())  # Add legend with channel names
+    plt.grid(True)
+    
+    # Show plot
+    plt.show()
+    
+#####################################################################################
+            
+
+            ### PSD BANDS ###
+def delta(mean_data_per_channel, freq_bands,f):    
+    y_values_selected = {}    
+    for channel_name, mean_array in mean_data_per_channel.items():
+        # Calculate the indices where x-values fall between 1.5 and 45
+        lower_bound=float(freq_bands['theta'][0])
+        higher_bound= float(freq_bands['theta'][1])
+        indices = np.where((f >= lower_bound) & (f <= higher_bound))      
+        # Extract the corresponding y values
+        y_selected = mean_array[indices]     
+        # Store y values in the dictionary with channel name as key
+        y_values_selected[channel_name] = y_selected         
+    return y_values_selected
+
+def theta(mean_data_per_channel, freq_bands,f):           
+    y_values_selected = {}    
+    for channel_name, mean_array in mean_data_per_channel.items():
+        # Calculate the indices where x-values fall between 1.5 and 45
+        lower_bound=float(freq_bands['theta'][0])
+        higher_bound= float(freq_bands['theta'][1])
+        indices = np.where((f >= lower_bound) & (f <= higher_bound))      
+        # Extract the corresponding y values
+        y_selected = mean_array[indices]       
+        # Store y values in the dictionary with channel name as key
+        y_values_selected[channel_name] = y_selected          
+    return y_values_selected
 
 
-#Below: Returns 2 arrays, freqs_pre_corr=[224,64,126](224 events, 64 channels, 126 ???), psds_pre_corr=[126,](126 ???)
-#freqs_pre_corr has values in the order of 10^-10 and I don't understand why ???
-freqs_pre_corr, psds_pre_corr = mne.time_frequency.psd_array_multitaper(pre_response_data_corr, Corr_data[0].info['sfreq'])
-#freqs_post_corr, psds_post_corr = mne.time_frequency.psd_array_multitaper(post_response_data_corr, Corr_data[0].info['sfreq'])
+def alpha(mean_data_per_channel, freq_bands,f):         
+    y_values_selected = {}  
+    for channel_name, mean_array in mean_data_per_channel.items():
+        # Calculate the indices where x-values fall between 1.5 and 45
+        lower_bound=float(freq_bands['alpha'][0])
+        higher_bound= float(freq_bands['alpha'][1])
+        indices = np.where((f >= lower_bound) & (f <= higher_bound)) 
+        # Extract the corresponding y values
+        y_selected = mean_array[indices]  
+        # Store y values in the dictionary with channel name as key
+        y_values_selected[channel_name] = y_selected       
+    return y_values_selected
+
+def beta(mean_data_per_channel, freq_bands,f):       
+    y_values_selected = {}  
+    for channel_name, mean_array in mean_data_per_channel.items():
+        # Calculate the indices where x-values fall between 1.5 and 45
+        lower_bound=float(freq_bands['beta'][0])
+        higher_bound= float(freq_bands['beta'][1])
+        indices = np.where((f >= lower_bound) & (f <= higher_bound))
+        # Extract the corresponding y values
+        y_selected = mean_array[indices] 
+        # Store y values in the dictionary with channel name as key
+        y_values_selected[channel_name] = y_selected    
+    return y_values_selected
+
+def high(mean_data_per_channel, freq_bands,f):        
+    y_values_selected = {}  
+    for channel_name, mean_array in mean_data_per_channel.items():
+        # Calculate the indices where x-values fall between 1.5 and 45
+        lower_bound=float(freq_bands['high'][0])
+        higher_bound= float(freq_bands['high'][1])
+        indices = np.where((f >= lower_bound) & (f <= higher_bound))
+        # Extract the corresponding y values
+        y_selected = mean_array[indices]
+        # Store y values in the dictionary with channel name as key
+        y_values_selected[channel_name] = y_selected      
+    return y_values_selected
+
+def All(mean_data_per_channel, freq_bands,f):      
+    y_values_selected = {}  
+    for channel_name, mean_array in mean_data_per_channel.items():
+        # Calculate the indices where x-values fall between 1.5 and 45
+        lower_bound=float(freq_bands['all'][0])
+        higher_bound= float(freq_bands['all'][1])
+        indices = np.where((f >= lower_bound) & (f <= higher_bound))
+        # Extract the corresponding y values
+        y_selected = mean_array[indices]
+        # Store y values in the dictionary with channel name as key
+        y_values_selected[channel_name] = y_selected   
+    return y_values_selected
+
+#############################################################################################
+            ## Channel cluster around FCZ (Fz, FC1, FCz, FC2, Cz) ##
+
+Cluster_FCZ=['FZ','FC1','FCZ','FC2','CZ']
+example_data={}
+example_f={}
+
+#P01 apenas para testar
+for subject_id, values in mean_data_per_channel.items():
+    if 'P01' in subject_id:
+        example_channel_name= subject_id[1]
+        example_data[example_channel_name] = values
+for subject_id,values in f.items():
+    if 'P01' in subject_id:
+        example_f = values
 
 
-plt.figure()
-#Below: Only way to obtain a plot is using freqs_pre_Corr[0][0] in order to have same dimension as psds_pre_corr
-#Don't understand the plot
-plt.plot(freqs_pre_corr[0][0], 10 * np.log10(psds_pre_corr))
-plt.title('Mean Power Spectral Density Around Response')
-plt.xlabel('Frequency (Hz)')
-plt.ylabel('Power/Frequency (dB/Hz)')
-plt.show()
 
-#
+theta_before=theta(example_data,freq_bands,example_f)
+theta_before_mean=[]
+for channel_name, theta_values in theta_before.items():
+    if channel_name in Cluster_FCZ:
+        theta_before_mean.append(theta_values)
+theta_before_mean= np.mean(theta_before_mean)
+print('theta:' , theta_before_mean)
+
+
+all_before= All(example_data, freq_bands, example_f)
+all_before_mean=[]
+for channel_name, all_values in all_before.items():
+    if channel_name in Cluster_FCZ:
+        all_before_mean.append(all_values)
+all_before_mean=np.mean(all_before_mean)
+print('all:' , all_before_mean)
+
+
+high_before= high(example_data, freq_bands, example_f)
+high_before_mean=[]
+for channel_name, high_values in high_before.items():
+    if channel_name in Cluster_FCZ:
+        high_before_mean.append(high_values)
+high_before_mean= np.mean(high_before_mean)
+print('high:', high_before_mean)
+
+
+theta_before_other=theta(example_data,freq_bands,example_f)
+theta_before_other_mean=[]
+for channel_name, theta_values in theta_before_other.items():
+    if channel_name not in Cluster_FCZ:
+        theta_before_other_mean.append(theta_values)
+theta_before_other_mean= np.mean(theta_before_other_mean)
+print('theta other channels:', theta_before_other_mean)
+

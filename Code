@@ -73,7 +73,7 @@ f,S= getpsd(pre_response_Corr_data)
 def getdatachannel(S,channel_name_list): 
     mean_data_per_channel = {}
     # Iterate over channels
-    for inc in range(64):  # Channels are indexed from 1 to 64
+    for inc in range(len(channel_name_list)):  # Channels are indexed from 1 to 64
         
         for subject_id, i in S.items():
             array = []

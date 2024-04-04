@@ -1,2 +1,0 @@
-D:/Tese[[:space:]]Mestrado/EEG_RealData/*.fdt filter=lfs diff=lfs merge=lfs -text
-D:/Tese[[:space:]]Mestrado/EEG_RealData/*.set filter=lfs diff=lfs merge=lfs -text

@@ -2,12 +2,8 @@ import numpy as np
 from sklearn.svm import SVC
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.preprocessing import StandardScaler
-<<<<<<< Updated upstream
-from sklearn.metrics import confusion_matrix
-=======
 from sklearn.metrics import confusion_matrix , ConfusionMatrixDisplay
 from sklearn.metrics import f1_score, precision_score, recall_score, balanced_accuracy_score
->>>>>>> Stashed changes
 import scipy.signal as signal
 
 

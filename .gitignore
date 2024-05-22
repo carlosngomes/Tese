@@ -1,4 +1,6 @@
 /data
+/EEG_ClassificationData
+/Dataset2
 /theta_features.txt
 /frequency_features.txt
 /temporal_features.txt

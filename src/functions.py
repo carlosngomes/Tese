@@ -2,7 +2,12 @@ import numpy as np
 from sklearn.svm import SVC
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.preprocessing import StandardScaler
+<<<<<<< Updated upstream
 from sklearn.metrics import confusion_matrix
+=======
+from sklearn.metrics import confusion_matrix , ConfusionMatrixDisplay
+from sklearn.metrics import f1_score, precision_score, recall_score, balanced_accuracy_score
+>>>>>>> Stashed changes
 import scipy.signal as signal
 
 
@@ -261,6 +266,8 @@ def fcz_features(type, dict, freq_bands, freq):
     """
     dados_mean = {}  # Initialize dictionary to store mean power for each subject
     Cluster_FCZ = ['FZ', 'FC1', 'FCZ', 'FC2', 'CZ']  # Define FCZ cluster channels
+    Cluster_midfrontal = ['FP1', 'FPZ', 'FP2', 'AF3', 'AF4', 'F5', 'F3', 'F1', 'F2', 'FZ', 'F4', 'F6', 'FC3', 'FC1', 'FCZ', 'FC2', 'FC4', 'C1', 'CZ', 'C2']  # Define midfrontal cluster channels
+
     for subject_id, values in dict.items():  # Iterate over each subject in the data dictionary
         values_list = []  # Initialize list to store mean power for each channel
         for channel_name, channel_data in values.items():  # Iterate over each channel's PSD data
@@ -274,7 +281,7 @@ def fcz_features(type, dict, freq_bands, freq):
                 data = theta(channel_data, freq_bands, freq)  # Calculate mean power using theta function for 'other' channels
             else:
                 assert False, "Invalid type '{}' provided.".format(type)  # Raise error for invalid type
-            if (type == 'other' and channel_name not in Cluster_FCZ) or (channel_name in Cluster_FCZ):
+            if (type == 'other' and channel_name not in Cluster_midfrontal) or (channel_name in Cluster_FCZ):
                 values_list.append(data)  # Append mean power to list if it's in the FCZ cluster or it's an 'other' channel
             else:
                 continue  # Skip channels that are not in the FCZ cluster for 'other' type
@@ -530,41 +537,40 @@ def classification(kern, feature, labels):
     value = np.array(extend_list(feature))
     label = np.array(extend_list(labels))
 
-    for _ in range(num_iterations):  # Perform Monte Carlo cross-validation iterations
-        shuffle_split = StratifiedShuffleSplit(test_size=test_size, train_size=train_size)
+    shuffle_split = StratifiedShuffleSplit(n_splits= num_iterations, test_size=test_size, train_size=train_size)
 
-        iteration_scores = []  # List to store scores for each iteration
+    iteration_scores = []  # List to store scores for each iteration
 
-        for train_index, test_index in shuffle_split.split(value, label):
-            X_train, X_test = value[train_index], value[test_index]
-            y_train, y_test = label[train_index], label[test_index]
+    for train_index, test_index in shuffle_split.split(value, label):
+        X_train, X_test = value[train_index], value[test_index]
+        y_train, y_test = label[train_index], label[test_index]
 
-            X_train_scaled = scaler.fit_transform(X_train)  # Standardize features for training data
-            X_test_scaled = scaler.transform(X_test)  # Standardize features for testing data
+        X_train_scaled = scaler.fit_transform(X_train)  # Standardize features for training data
+        X_test_scaled = scaler.transform(X_test)  # Standardize features for testing data
 
-            model.fit(X_train_scaled, y_train)  # Fit the SVM model to the training data
+        model.fit(X_train_scaled, y_train)  # Fit the SVM model to the training data
 
-            score = model.score(X_test_scaled, y_test)  # Calculate accuracy score
-            iteration_scores.append(score)
+        score = model.score(X_test_scaled, y_test)  # Calculate accuracy score
+        iteration_scores.append(score)
 
-            # Calculate confusion matrix
-            y_pred = model.predict(X_test_scaled)
-            cm = confusion_matrix(y_test, y_pred)
-            tn, fp, fn, tp = cm.ravel()
+        # Calculate confusion matrix
+        y_pred = model.predict(X_test_scaled)
+        cm = confusion_matrix(y_test, y_pred)
+        tp, fn, fp, tn = cm.ravel()
 
-            sensitivity = tp / (tp + fn)  # Calculate sensitivity
-            specificity = tn / (tn + fp)  # Calculate specificity
-            balanced_accuracy = (sensitivity + specificity) / 2  # Calculate balanced accuracy
+        sensitivity = tp / (tp + fn)  # Calculate sensitivity
+        specificity = tn / (tn + fp)  # Calculate specificity
+        balanced_accuracy = (sensitivity + specificity) / 2  # Calculate balanced accuracy
 
-            sensitivities.append(sensitivity)
-            specificities.append(specificity)
-            balanced_accuracies.append(balanced_accuracy)
-
+        sensitivities.append(sensitivity)
+        specificities.append(specificity)
+        balanced_accuracies.append(balanced_accuracy)
+        try:
             if kern == 'linear':
                 coef = model.coef_[0]  # Get coefficients for linear kernel
                 coefs.append(coef)
-            else:
-                continue
+        except:
+            pass
 
         mean_score = np.mean(iteration_scores)  # Calculate mean score for the iteration
         std_score = np.std(iteration_scores)  # Calculate standard deviation of scores for the iteration
@@ -576,6 +582,7 @@ def classification(kern, feature, labels):
         mean_scores.append(mean_score)
         std_scores.append(std_score)
 
+    
     # Calculate overall mean and standard deviation of scores
     overall_mean_score = np.mean(mean_scores)
     overall_std_score = np.mean(std_scores)

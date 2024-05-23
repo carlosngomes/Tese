@@ -281,7 +281,7 @@ def fcz_features(type, dict, freq_bands, freq):
         dados_mean[subject_id] = means  # Store mean power for each subject
     return dados_mean  # Return dictionary containing mean power for each subject
 
-def all_features(type, dict, freq_bands, freq): 
+def all_features(ch_name,type, dict, freq_bands, freq): 
     """
     Calculate mean power for specified frequency bands for each channel of each subject.
 
@@ -310,12 +310,15 @@ def all_features(type, dict, freq_bands, freq):
                 data = alpha(channel_data, freq_bands, freq)  # Calculate mean power for alpha band
             else:
                 assert False, "Invalid type '{}' provided.".format(type)  # Raise error for invalid type
-            values_list.append(data)  # Append mean power to list for each channel
+            if channel_name==ch_name:
+                values_list.append(data)  # Append mean power to list for each channel
+            else:
+                continue
         means = mean_of_lists(values_list)  # Calculate mean of mean power for all channels
         dados_mean[subject_id] = means  # Store mean power for each subject
     return dados_mean  # Return dictionary containing mean power for each subject
 
-def midfrontal_features(type, dict, freq_bands, freq): 
+def midfrontal_features(ch_name,type, dict, freq_bands, freq): 
     """
     Calculate mean power for specified frequency bands for midfrontal cluster or other channels.
 
@@ -339,7 +342,7 @@ def midfrontal_features(type, dict, freq_bands, freq):
                 data = theta(channel_data, freq_bands, freq)  # Calculate mean power using theta function for 'other' channels
             else:
                 assert False, "Invalid type '{}' provided.".format(type)  # Raise error for invalid type
-            if (type == 'other' and channel_name not in Cluster_midfrontal) or (channel_name in Cluster_midfrontal):
+            if (type == 'other' and channel_name not in Cluster_midfrontal) or (type=='theta' and channel_name==ch_name):
                 values_list.append(data)  # Append mean power to list if it's in the midfrontal cluster or it's an 'other' channel
             else:
                 continue  # Skip channels that are not in the midfrontal cluster for 'other' type
@@ -347,7 +350,7 @@ def midfrontal_features(type, dict, freq_bands, freq):
         dados_mean[subject_id] = means  # Store mean power for each subject
     return dados_mean  # Return dictionary containing mean power for each subject
 
-def low_features(type, dict, freq_bands, freq):
+def low_features(ch_name,type, dict, freq_bands, freq):
     """
     Calculate mean power for specified frequency bands for low channels.
 
@@ -376,7 +379,10 @@ def low_features(type, dict, freq_bands, freq):
                 data = high(channel_data, freq_bands, freq)  # Calculate mean power for high frequency band
             else:
                 assert False, "Invalid type '{}' provided.".format(type)  # Raise error for invalid type
-            values_list.append(data)  # Append mean power to list for each channel
+            if channel_name==ch_name:
+                values_list.append(data)  # Append mean power to list for each channel
+            else:
+                continue
         means = mean_of_lists(values_list)  # Calculate mean of mean power for all channels
         dados_mean[subject_id] = means  # Store mean power for each subject
     return dados_mean  # Return dictionary containing mean power for each subject
@@ -384,7 +390,7 @@ def low_features(type, dict, freq_bands, freq):
 
 
 
-def feature(type, type_freq1, type_freq2, data1, data2, freq_bands, f1, f2): 
+def feature(type,ch_name1,ch_name2, type_freq1, type_freq2, data1, data2, freq_bands, f1, f2): 
     """
     Calculate feature values for specified types of features and frequency bands.
 
@@ -408,13 +414,13 @@ def feature(type, type_freq1, type_freq2, data1, data2, freq_bands, f1, f2):
             feature[subject_id] = [x/y for x, y in zip(fcz_features(type_freq1, data1, freq_bands, f1[subject_id])[subject_id], fcz_features(type_freq2, data2, freq_bands, f2[subject_id])[subject_id])]
         elif type == 'all_features':
             # Calculate feature values for all channels features
-            feature[subject_id] = [x/y for x, y in zip(all_features(type_freq1, data1, freq_bands, f1[subject_id])[subject_id], all_features(type_freq2, data2, freq_bands, f2[subject_id])[subject_id])]
+            feature[subject_id] = [x/y for x, y in zip(all_features(ch_name1,type_freq1, data1, freq_bands, f1[subject_id])[subject_id], all_features(ch_name2,type_freq2, data2, freq_bands, f2[subject_id])[subject_id])]
         elif type == 'midfrontal_features':
             # Calculate feature values for midfrontal cluster features
-            feature[subject_id] = [x/y for x, y in zip(midfrontal_features(type_freq1, data1, freq_bands, f1[subject_id])[subject_id], midfrontal_features(type_freq2, data2, freq_bands, f2[subject_id])[subject_id])]
+            feature[subject_id] = [x/y for x, y in zip(midfrontal_features(ch_name1,type_freq1, data1, freq_bands, f1[subject_id])[subject_id], midfrontal_features(ch_name2,type_freq2, data2, freq_bands, f2[subject_id])[subject_id])]
         elif type == 'low_features':
             # Calculate feature values for low channels features
-            feature[subject_id] = [x/y for x, y in zip(low_features(type_freq1, data1, freq_bands, f1[subject_id])[subject_id], low_features(type_freq2, data2, freq_bands, f2[subject_id])[subject_id])]
+            feature[subject_id] = [x/y for x, y in zip(low_features(ch_name1,type_freq1, data1, freq_bands, f1[subject_id])[subject_id], low_features(ch_name2,type_freq2, data2, freq_bands, f2[subject_id])[subject_id])]
         else:
             assert False, "Invalid type '{}' provided.".format(type)  # Raise error for invalid type
     return feature  # Return dictionary containing feature values for each subject

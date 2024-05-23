@@ -45,7 +45,7 @@ def getpsd(data, fs):
 
 
 
-def getdataperchannel(S, channel_names):
+def getdataperchannel(S):
     """
     Extracts data per channel from the PSD data.
 
@@ -68,7 +68,7 @@ def getdataperchannel(S, channel_names):
     # Iterate over each subject in the PSD data dictionary
     for subject_id, subject_data in S.items():
         # Initialize dictionary to store data for each channel
-        channel_data = {}
+        channel_data1 = {}
 
         # Iterate over each channel in the subject data
         for channel_name, channel_data in subject_data.items():
@@ -83,12 +83,11 @@ def getdataperchannel(S, channel_names):
 
             # Convert the list of data arrays into a numpy array
             array = np.array(array)
-
             # Store the data array for the current channel
-            channel_data[channel_name] = array
+            channel_data1[channel_name] = array
 
         # Store data for each channel in the subject's data dictionary
-        data_per_channel[subject_id] = channel_data
+        data_per_channel[subject_id] = channel_data1
 
     # Return dictionary containing data per channel for each subject
     return data_per_channel

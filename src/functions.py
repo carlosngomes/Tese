@@ -2,9 +2,10 @@ import numpy as np
 from sklearn.svm import SVC
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import confusion_matrix
 import scipy.signal as signal
-
+from sklearn.svm import SVC
+from sklearn.metrics import f1_score, precision_score, recall_score, balanced_accuracy_score, confusion_matrix
+import pandas as pd
 
 def getpsd(data, fs):
     """
@@ -505,7 +506,7 @@ def mean_of_lists(input_list):
 
 
 
-def classification(kern, feature, labels):
+def classification(X, Y):
     """
     Perform classification using Support Vector Machine (SVM) with different kernels.
 
@@ -517,91 +518,45 @@ def classification(kern, feature, labels):
     Returns:
     None
     """
-    num_iterations = 100  # Number of iterations for Monte Carlo cross-validation
-    test_size = 0.3  # Percentage of data to use for testing
-    train_size = 0.7  # Percentage of data to use for training
+    
 
-    model = SVC(kernel=kern, class_weight='balanced')  # SVM model with balanced class weights
-    scaler = StandardScaler()  # Standard scaler for feature standardization
+    f1score = []
+    precision = []
+    recall = []
+    specificity = []
+    npv = []
+    bal_acc = []
 
-    mean_scores = []  # List to store mean scores for each iteration
-    std_scores = []  # List to store standard deviation of scores for each iteration
-    sensitivities = []  # List to store sensitivity values for each iteration
-    specificities = []  # List to store specificity values for each iteration
-    balanced_accuracies = []  # List to store balanced accuracy values for each iteration
-    coefs = []  # List to store coefficients (for linear kernel)
+    splits = 100
+    sss = StratifiedShuffleSplit(n_splits=splits, test_size=0.3, random_state=0)
+    svm = SVC(class_weight='balanced')
+    scaler = StandardScaler()
+    X_col = X.columns
+    Y=np.array(Y)
 
-    # Convert feature and label data into arrays
-    value = np.array(extend_list(feature))
-    label = np.array(extend_list(labels))
+    for train_index, test_index in sss.split(X, Y):
+        X_train, X_test = X.iloc[train_index, :], X.iloc[test_index, :]
+        Y_train, Y_test = Y[train_index], Y[test_index]
+        scal = scaler.fit(X_train)
+        X_train = scal.transform(X_train)  # Variables standardization
+        X_test = scal.transform(X_test)  # Variables standardization
+        X_train = pd.DataFrame(X_train, columns=X_col)
+        X_test = pd.DataFrame(X_test, columns=X_col)
+        clf = svm.fit(X_train, Y_train)
+        Y_predicted = clf.predict(X_test)
+        f1score.append(f1_score(Y_test, Y_predicted))
+        precision.append(precision_score(Y_test, Y_predicted))  # Precision = Positive predictive value
+        npv.append(precision_score(Y_test, Y_predicted, pos_label=0))  # Negative predictive value
+        recall.append(recall_score(Y_test, Y_predicted))  # Recall = Sensitivity
+        specificity.append(recall_score(Y_test, Y_predicted, pos_label=0))
+        bal_acc.append(balanced_accuracy_score(Y_test, Y_predicted))
 
-    for _ in range(num_iterations):  # Perform Monte Carlo cross-validation iterations
-        shuffle_split = StratifiedShuffleSplit(test_size=test_size, train_size=train_size)
-
-        iteration_scores = []  # List to store scores for each iteration
-
-        for train_index, test_index in shuffle_split.split(value, label):
-            X_train, X_test = value[train_index], value[test_index]
-            y_train, y_test = label[train_index], label[test_index]
-
-            X_train_scaled = scaler.fit_transform(X_train)  # Standardize features for training data
-            X_test_scaled = scaler.transform(X_test)  # Standardize features for testing data
-
-            model.fit(X_train_scaled, y_train)  # Fit the SVM model to the training data
-
-            score = model.score(X_test_scaled, y_test)  # Calculate accuracy score
-            iteration_scores.append(score)
-
-            # Calculate confusion matrix
-            y_pred = model.predict(X_test_scaled)
-            cm = confusion_matrix(y_test, y_pred)
-            tn, fp, fn, tp = cm.ravel()
-
-            sensitivity = tp / (tp + fn)  # Calculate sensitivity
-            specificity = tn / (tn + fp)  # Calculate specificity
-            balanced_accuracy = (sensitivity + specificity) / 2  # Calculate balanced accuracy
-
-            sensitivities.append(sensitivity)
-            specificities.append(specificity)
-            balanced_accuracies.append(balanced_accuracy)
-
-            if kern == 'linear':
-                coef = model.coef_[0]  # Get coefficients for linear kernel
-                coefs.append(coef)
-            else:
-                continue
-
-        mean_score = np.mean(iteration_scores)  # Calculate mean score for the iteration
-        std_score = np.std(iteration_scores)  # Calculate standard deviation of scores for the iteration
-
-        print("Mean score: {:.4f}".format(mean_score))
-        print("Std score: {:.4f}".format(std_score))
-        print("-------------------------------")
-
-        mean_scores.append(mean_score)
-        std_scores.append(std_score)
-
-    # Calculate overall mean and standard deviation of scores
-    overall_mean_score = np.mean(mean_scores)
-    overall_std_score = np.mean(std_scores)
-    print("Overall Mean score: {:.4f}".format(overall_mean_score))
-    print("Overall Std score: {:.4f}".format(overall_std_score))
-
-    # Calculate mean and standard deviation of sensitivity, specificity, and balanced accuracy
-    mean_sensitivity = np.mean(sensitivities)
-    std_sensitivity = np.std(sensitivities)
-    mean_specificity = np.mean(specificities)
-    std_specificity = np.std(specificities)
-    mean_balanced_accuracy = np.mean(balanced_accuracies)
-    std_balanced_accuracy = np.std(balanced_accuracies)
-    print("Mean Sensitivity: {:.4f}".format(mean_sensitivity))
-    print("Std Sensitivity: {:.4f}".format(std_sensitivity))
-    print("Mean Specificity: {:.4f}".format(mean_specificity))
-    print("Std Specificity: {:.4f}".format(std_specificity))
-    print("Mean Balanced Accuracy: {:.4f}".format(mean_balanced_accuracy))
-    print("Std Balanced Accuracy: {:.4f}".format(std_balanced_accuracy))
-    mean_coef= mean_of_lists(coefs)
-    if kern == 'linear':
-        # Print coefficients for linear kernel
-        for feature, score in enumerate(mean_coef):
-            print(f"Feature {feature+1}: {score}")
+    # print(np.mean(f1score))
+    # print(np.mean(precision))
+    print("Mean Sensitivity: {:.4f}".format(np.mean(recall)))
+    print("Std Sensitivity: {:.4f}".format(np.std(recall)))
+    print("Mean Specificity: {:.4f}".format(np.mean(specificity)))
+    print("Std Specificity: {:.4f}".format(np.std(specificity)))
+    # print(np.mean(npv))
+    print("Mean Balanced Accuracy: {:.4f}".format(np.mean(bal_acc)))
+    print("Std Balanced Accuracy: {:.4f}".format(np.std(bal_acc)))

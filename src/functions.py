@@ -506,7 +506,7 @@ def mean_of_lists(input_list):
 
 
 
-def classification(X, Y):
+def classification(i,X, Y):
     """
     Perform classification using Support Vector Machine (SVM) with different kernels.
 
@@ -553,6 +553,7 @@ def classification(X, Y):
 
     # print(np.mean(f1score))
     # print(np.mean(precision))
+    print("Number of features used: "+ str(i))
     print("Mean Sensitivity: {:.4f}".format(np.mean(recall)))
     print("Std Sensitivity: {:.4f}".format(np.std(recall)))
     print("Mean Specificity: {:.4f}".format(np.mean(specificity)))

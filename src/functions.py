@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.svm import SVC
-from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.model_selection import StratifiedShuffleSplit, GridSearchCV
 from sklearn.preprocessing import StandardScaler
 import scipy.signal as signal
 from sklearn.svm import SVC
@@ -157,27 +157,6 @@ def alpha(data, freq_bands,f):
         indices = np.where((f >= lower_bound) & (f <= higher_bound))   
         y_selected = data[i][indices]
         data_list.append(np.mean(y_selected))
-    return data_list
-
-def beta(data, freq_bands,f): 
-    """
-    Calculate the mean power within the delta frequency band for each data point.
-
-    Parameters:
-    - data (array-like): Array containing PSD data for each data point.
-    - freq_bands (dict): Dictionary containing frequency band ranges.
-    - f (array-like): Array containing frequency values.
-
-    Returns:
-    - data_list (list): List containing the mean power within the delta frequency band for each data point.
-    """
-    data_list=[]
-    for i in range(len(data)):
-        lower_bound=float(freq_bands['beta'][0])
-        higher_bound= float(freq_bands['beta'][1])
-        indices = np.where((f >= lower_bound) & (f <= higher_bound)) 
-        y_selected = data[i][indices]
-        data_list.append(np.mean(y_selected))  
     return data_list
 
 def high(data, freq_bands,f): 
@@ -343,7 +322,7 @@ def midfrontal_features(ch_name,type, dict, freq_bands, freq):
                 data = theta(channel_data, freq_bands, freq)  # Calculate mean power using theta function for 'other' channels
             else:
                 assert False, "Invalid type '{}' provided.".format(type)  # Raise error for invalid type
-            if (type == 'other' and channel_name not in Cluster_midfrontal) or (type=='theta' and channel_name==ch_name):
+            if (type == 'other' and channel_name not in Cluster_midfrontal) or (type=='theta' and channel_name==ch_name and ch_name in Cluster_midfrontal):
                 values_list.append(data)  # Append mean power to list if it's in the midfrontal cluster or it's an 'other' channel
             else:
                 continue  # Skip channels that are not in the midfrontal cluster for 'other' type
@@ -505,13 +484,12 @@ def mean_of_lists(input_list):
 
 
 
-
 def classification(i,X, Y):
     """
     Perform classification using Support Vector Machine (SVM) with different kernels.
 
     Parameters:
-    - kern (str): Kernel type for SVM ('linear', 'rbf', etc.).
+    - i (int): Number of features used in the classification process.
     - feature (dict): Dictionary containing feature data for each subject.
     - labels (dict): Dictionary containing labels for each subject.
 
@@ -551,13 +529,10 @@ def classification(i,X, Y):
         specificity.append(recall_score(Y_test, Y_predicted, pos_label=0))
         bal_acc.append(balanced_accuracy_score(Y_test, Y_predicted))
 
-    # print(np.mean(f1score))
-    # print(np.mean(precision))
     print("Number of features used: "+ str(i))
     print("Mean Sensitivity: {:.4f}".format(np.mean(recall)))
     print("Std Sensitivity: {:.4f}".format(np.std(recall)))
     print("Mean Specificity: {:.4f}".format(np.mean(specificity)))
     print("Std Specificity: {:.4f}".format(np.std(specificity)))
-    # print(np.mean(npv))
     print("Mean Balanced Accuracy: {:.4f}".format(np.mean(bal_acc)))
     print("Std Balanced Accuracy: {:.4f}".format(np.std(bal_acc)))

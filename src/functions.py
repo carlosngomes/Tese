@@ -4,8 +4,10 @@ from sklearn.model_selection import StratifiedShuffleSplit, GridSearchCV
 from sklearn.preprocessing import StandardScaler
 import scipy.signal as signal
 from sklearn.svm import SVC
-from sklearn.metrics import f1_score, precision_score, recall_score, balanced_accuracy_score, confusion_matrix
+from statsmodels.stats.proportion import proportions_ztest
+from sklearn.metrics import f1_score, precision_score, recall_score, balanced_accuracy_score, confusion_matrix, roc_curve, auc, r2_score
 import pandas as pd
+from mrmr import mrmr_classif
 
 def getpsd(data, fs):
     """
@@ -484,33 +486,26 @@ def mean_of_lists(input_list):
 
 
 
-#def classification(i,X, Y, params, test_size):
-    """
-    Perform classification using Support Vector Machine (SVM) with different kernels.
-
-    Parameters:
-    - i (int): Number of features used in the classification process.
-    - feature (dict): Dictionary containing feature data for each subject.
-    - labels (dict): Dictionary containing labels for each subject.
-
-    Returns:
-    None
-    """
-    
-
+def classification(i, X, Y, params, test_size):
     f1score = []
     precision = []
     recall = []
     specificity = []
     npv = []
     bal_acc = []
+    r2_scores = []
+    roc_auc_scores = []
 
     splits = 100
     sss = StratifiedShuffleSplit(n_splits=splits, test_size=test_size, random_state=0)
-    svm = SVC(class_weight='balanced', **params)
+    svm = SVC(class_weight='balanced', **params, probability=True)
     scaler = StandardScaler()
     X_col = X.columns
-    Y=np.array(Y)
+    Y = np.array(Y)
+
+    best_bal_acc = -1
+    best_clf = None
+    best_scaler = None
 
     for train_index, test_index in sss.split(X, Y):
         X_train, X_test = X.iloc[train_index, :], X.iloc[test_index, :]
@@ -522,12 +517,24 @@ def mean_of_lists(input_list):
         X_test = pd.DataFrame(X_test, columns=X_col)
         clf = svm.fit(X_train, Y_train)
         Y_predicted = clf.predict(X_test)
+        Y_predicted_prob = clf.predict_proba(X_test)[:, 1]
+
         f1score.append(f1_score(Y_test, Y_predicted))
         precision.append(precision_score(Y_test, Y_predicted))  # Precision = Positive predictive value
         npv.append(precision_score(Y_test, Y_predicted, pos_label=0))  # Negative predictive value
         recall.append(recall_score(Y_test, Y_predicted))  # Recall = Sensitivity
         specificity.append(recall_score(Y_test, Y_predicted, pos_label=0))
         bal_acc.append(balanced_accuracy_score(Y_test, Y_predicted))
+        r2_scores.append(r2_score(Y_test, Y_predicted))
+        
+        fpr, tpr, _ = roc_curve(Y_test, Y_predicted_prob)
+        roc_auc_scores.append(auc(fpr, tpr))
+
+        # Track the best model based on balanced accuracy
+        if balanced_accuracy_score(Y_test, Y_predicted) > best_bal_acc:
+            best_bal_acc = balanced_accuracy_score(Y_test, Y_predicted)
+            best_clf = clf
+            best_scaler = scal
 
     print("Number of features used: "+ str(i))
     print("Mean Sensitivity: {:.4f}".format(np.mean(recall)))
@@ -536,21 +543,16 @@ def mean_of_lists(input_list):
     print("Std Specificity: {:.4f}".format(np.std(specificity)))
     print("Mean Balanced Accuracy: {:.4f}".format(np.mean(bal_acc)))
     print("Std Balanced Accuracy: {:.4f}".format(np.std(bal_acc)))
-    return np.mean(bal_acc)
+    print("Mean R^2: {:.4f}".format(np.mean(r2_scores)))
+    print("Std R^2: {:.4f}".format(np.std(r2_scores)))
+    print("Mean ROC AUC: {:.4f}".format(np.mean(roc_auc_scores)))
+    print("Std ROC AUC: {:.4f}".format(np.std(roc_auc_scores)))
+    
+    return np.mean(bal_acc), best_clf, best_scaler
 
-from mrmr import mrmr_classif
 
 
-import numpy as np
-import pandas as pd
-from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.svm import SVC
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import f1_score, precision_score, recall_score, balanced_accuracy_score, roc_curve, auc, r2_score
-import matplotlib.pyplot as plt
-from statsmodels.stats.proportion import proportions_ztest
-
-def classification(i, X, Y, params, test_size):
+#def classification(i, X, Y, params, test_size):
     f1score = []
     precision = []
     recall = []
@@ -589,19 +591,6 @@ def classification(i, X, Y, params, test_size):
         
         fpr, tpr, _ = roc_curve(Y_test, Y_predicted_prob)
         roc_auc_scores.append(auc(fpr, tpr))
-        
-        # ROC Curve plotting for the last iteration
-        if train_index[0] == 0:
-            plt.figure()
-            plt.plot(fpr, tpr, color='darkorange', lw=2, label='ROC curve (area = %0.2f)' % auc(fpr, tpr))
-            plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-            plt.xlim([0.0, 1.0])
-            plt.ylim([0.0, 1.05])
-            plt.xlabel('False Positive Rate')
-            plt.ylabel('True Positive Rate')
-            plt.title('Receiver Operating Characteristic')
-            plt.legend(loc="lower right")
-            plt.show()
 
     print("Number of features used: "+ str(i))
     print("Mean Sensitivity: {:.4f}".format(np.mean(recall)))
@@ -615,15 +604,7 @@ def classification(i, X, Y, params, test_size):
     print("Mean ROC AUC: {:.4f}".format(np.mean(roc_auc_scores)))
     print("Std ROC AUC: {:.4f}".format(np.std(roc_auc_scores)))
     
-    # Proportions test
-    count = np.sum(Y_predicted)
-    nobs = len(Y_predicted)
-    stat, pval = proportions_ztest(count, nobs, value=np.mean(Y_test))
-    print("Proportions test statistic: {:.4f}".format(stat))
-    print("Proportions test p-value: {:.4f}".format(pval))
-    
     return np.mean(bal_acc)
-
 
 
 
@@ -653,8 +634,7 @@ def feature_selection(X, Y, n_features):
     #seleciona 1ª feature, faz correlacao c target. 
     #2ª feature faz correlaçaõ c o target e c as features anteriores. 
     #Correlação alta com as features anteriores é redundante.
-    selected_features = mrmr_classif(X=X, y=Y, K=n_features) 
-
+    selected_features = mrmr_classif(X=X, y=Y, K=n_features)
     # Create a DataFrame with the selected features
     selected_features_df = X[selected_features]
 
@@ -665,6 +645,7 @@ def feature_selection(X, Y, n_features):
 import pandas as pd
 import matplotlib.pyplot as plt
 
+
 def best_n_features(X, Y, params):
     """
     Determines the optimal number of features for classification based on balanced accuracy.
@@ -672,72 +653,91 @@ def best_n_features(X, Y, params):
     Parameters:
     X (pd.DataFrame): The input feature matrix.
     Y (pd.Series): The target vector.
+    params (dict): Parameters for the classifier.
     
     Returns:
     int: The optimal number of features.
     pd.DataFrame: DataFrame containing the selected features.
     """
-
+    
     bal_acc_list = []
     features_list = []
-    best_test_list=[]
-    for i in range(1, 51):
+    best_test_sizes = []
+    clf_list=[]
+    scaler_list=[]
+    
+    for i in range(20, 51):
         selected_features = feature_selection(X, Y, i)
         features_list.append(selected_features)
         
-        test_size=0.5
-        bal_acc_p_feature=[]
-        test_list=[]
-        while test_size>=0.1:
+        test_size = 0.5
+        bal_acc_p_feature = []
+        test_sizes = [] 
+        clf1_list=[]
+        scaler1_list=[]     
+        
+        while test_size >= 0.1:
             print(f'Test size: {test_size:.2f}')
-            bal_accuracy = classification(i, selected_features, Y, params, test_size)
+            bal_accuracy, clf, scaler = classification(i, selected_features, Y, params, test_size)
             bal_acc_p_feature.append(bal_accuracy)
-            test_size-=0.05
-            test_list.append(test_size)
+            clf1_list.append(clf)
+            scaler1_list.append(scaler)
+            test_sizes.append(test_size)
+            test_size -= 0.05
+
         max_test_index = bal_acc_p_feature.index(max(bal_acc_p_feature))
-        best_test_size=0.5-max_test_index*0.05   
+        best_test_size = test_sizes[max_test_index]
         print(f'Best test size: {best_test_size:.2f} with balanced accuracy: {max(bal_acc_p_feature):.4f} for number of features: {i}')
 
-        best_test_list.append(test_list)
+        best_test_sizes.append(best_test_size)
         bal_acc_list.append(max(bal_acc_p_feature))
+        clf_list.append(clf1_list[max_test_index])
+        scaler_list.append(scaler1_list[max_test_index])
+
     # Find the index of the highest balanced accuracy
     max_index = bal_acc_list.index(max(bal_acc_list))
     feature_number = max_index + 1
     best_features = features_list[max_index]
+    best_clf = clf_list[max_index]
+    best_scaler = scaler_list[max_index]
 
-    print(f'Best number of features: {feature_number} with balanced accuracy: {bal_acc_list[max_index]:.4f} and test size: {best_test_list[max_index].index(max(best_test_list[max_index])):.2f}')
+    print(f'Best number of features: {feature_number} with balanced accuracy: {bal_acc_list[max_index]:.4f} and test size: {best_test_sizes[max_index]:.2f}')
 
     # Prepare data for plotting
-    x1 = list(range(1, 51))
+    x1 = list(range(20, 51))
     y1 = bal_acc_list
-    x2= best_test_list[max_index]
-    y2= bal_acc_p_feature[max_index]
+
+    x2 = test_sizes
+    y2 = bal_acc_p_feature
 
     plt.figure(figsize=(12, 6))
+
+    plt.subplot(1, 2, 1)
     plt.xlabel('Number of features')
     plt.ylabel('Balanced Accuracy')
-    plt.title('Features')
+    plt.title('Balanced Accuracy vs Number of Features')
     plt.grid(True)
     plt.plot(x1, y1, label='Features', color='blue')
-    # Setting x-ticks with a reasonable interval
-    plt.xticks(ticks=range(1, 51, 5))
-    plt.subplot(1, 2, 1)
+    plt.xticks(ticks=range(30, 51, 5))
+    plt.legend()
 
-    plt.figure(figsize=(12, 6))
+    plt.subplot(1, 2, 2)
     plt.xlabel('Test Size')
     plt.ylabel('Balanced Accuracy')
-    plt.title('Test Size for Feature {}'.format(feature_number))
+    plt.title(f'Test Size for Feature {feature_number}')
     plt.grid(True)
-    plt.plot(x2, y2, label='Features', color='blue')
-    # Setting x-ticks with a reasonable interval
-    plt.xticks(ticks=range(0.1, 0.5, 0.05))
-    plt.subplot(1, 2, 2)    
-
-
+    plt.plot(x2, y2, label='Test Sizes', color='blue')
+    plt.xticks(ticks=np.arange(0.1, 0.55, 0.05))
     plt.legend()
+    plt.tight_layout()
     plt.show()
 
-    return feature_number, best_features
+    return feature_number, best_features, best_clf, best_scaler
+
+
+
+
+
 
 # Example usage (assuming `feature_selection` and `classification` functions are defined)
 # n_feature, feature_df = best_n_features(X_theta, Y)
@@ -837,3 +837,4 @@ def camila_feat_selection(X,Y):
     feat_ttest = feat_ttest[np.argsort(np.argsort(feat_ttest)) < 40]
     Xcol_sort = [x for _, x in sorted(zip(feat_ttest, X1.columns))]
     print(Xcol_sort)
+    return Xcol_sort

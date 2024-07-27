@@ -5,9 +5,10 @@ from sklearn.preprocessing import StandardScaler
 import scipy.signal as signal
 from sklearn.svm import SVC
 from statsmodels.stats.proportion import proportions_ztest
-from sklearn.metrics import f1_score, precision_score, recall_score, balanced_accuracy_score, confusion_matrix, roc_curve, auc, r2_score
+from sklearn.metrics import f1_score, precision_score, recall_score, balanced_accuracy_score, confusion_matrix, roc_curve, auc, r2_score, ConfusionMatrixDisplay
 import pandas as pd
 from mrmr import mrmr_classif
+import matplotlib.pyplot as plt
 
 def getpsd(data, fs):
     """
@@ -547,7 +548,12 @@ def classification(i, X, Y, params, test_size):
     print("Std R^2: {:.4f}".format(np.std(r2_scores)))
     print("Mean ROC AUC: {:.4f}".format(np.mean(roc_auc_scores)))
     print("Std ROC AUC: {:.4f}".format(np.std(roc_auc_scores)))
-    
+    print('Confusion Matrix for one of the iterations:')
+    cm=confusion_matrix(Y_test, Y_predicted)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[0, 1])
+    disp.plot(cmap=plt.cm.Blues)
+    plt.title('Confusion Matrix')
+    plt.show()
     return np.mean(bal_acc), best_clf, best_scaler
 
 
@@ -632,7 +638,7 @@ def feature_selection(X, Y, n_features):
 
     # Select features using mRMR
     #seleciona 1ª feature, faz correlacao c target. 
-    #2ª feature faz correlaçaõ c o target e c as features anteriores. 
+    #2ª feature faz correlação c o target e c as features anteriores. 
     #Correlação alta com as features anteriores é redundante.
     selected_features = mrmr_classif(X=X, y=Y, K=n_features)
     # Create a DataFrame with the selected features
@@ -642,8 +648,24 @@ def feature_selection(X, Y, n_features):
 
 
 
-import pandas as pd
-import matplotlib.pyplot as plt
+from sklearn.feature_selection import mutual_info_regression
+from sklearn.metrics import mutual_info_score
+def calculate_relevance(X, Y):
+    """Calculate the mutual information between each feature and the target."""
+    return mutual_info_regression(X, Y)
+
+
+
+def calculate_redundancy(X):
+    """Calculate the mutual information between each pair of features."""
+    n_features = X.shape[1]
+    redundancy = np.zeros((n_features, n_features))
+    for i in range(n_features):
+        for j in range(i + 1, n_features):
+            redundancy[i, j] = mutual_info_score(X.iloc[:, i], X.iloc[:, j])
+            redundancy[j, i] = redundancy[i, j]
+    return redundancy
+
 
 
 def best_n_features(X, Y, params):
@@ -662,38 +684,18 @@ def best_n_features(X, Y, params):
     
     bal_acc_list = []
     features_list = []
-    best_test_sizes = []
     clf_list=[]
     scaler_list=[]
     
-    for i in range(20, 51):
+    for i in range(1, 51):
         selected_features = feature_selection(X, Y, i)
         features_list.append(selected_features)
+        test_size = 0.1
+        bal_accuracy, clf, scaler = classification(i, selected_features, Y, params, test_size)
+        bal_acc_list.append(bal_accuracy)
+        clf_list.append(clf)
+        scaler_list.append(scaler)
         
-        test_size = 0.5
-        bal_acc_p_feature = []
-        test_sizes = [] 
-        clf1_list=[]
-        scaler1_list=[]     
-        
-        while test_size >= 0.1:
-            print(f'Test size: {test_size:.2f}')
-            bal_accuracy, clf, scaler = classification(i, selected_features, Y, params, test_size)
-            bal_acc_p_feature.append(bal_accuracy)
-            clf1_list.append(clf)
-            scaler1_list.append(scaler)
-            test_sizes.append(test_size)
-            test_size -= 0.05
-
-        max_test_index = bal_acc_p_feature.index(max(bal_acc_p_feature))
-        best_test_size = test_sizes[max_test_index]
-        print(f'Best test size: {best_test_size:.2f} with balanced accuracy: {max(bal_acc_p_feature):.4f} for number of features: {i}')
-
-        best_test_sizes.append(best_test_size)
-        bal_acc_list.append(max(bal_acc_p_feature))
-        clf_list.append(clf1_list[max_test_index])
-        scaler_list.append(scaler1_list[max_test_index])
-
     # Find the index of the highest balanced accuracy
     max_index = bal_acc_list.index(max(bal_acc_list))
     feature_number = max_index + 1
@@ -701,14 +703,12 @@ def best_n_features(X, Y, params):
     best_clf = clf_list[max_index]
     best_scaler = scaler_list[max_index]
 
-    print(f'Best number of features: {feature_number} with balanced accuracy: {bal_acc_list[max_index]:.4f} and test size: {best_test_sizes[max_index]:.2f}')
+    print(f'Best number of features: {feature_number} with balanced accuracy: {bal_acc_list[max_index]:.4f}')
 
     # Prepare data for plotting
-    x1 = list(range(20, 51))
+    x1 = list(range(1, 51))
     y1 = bal_acc_list
 
-    x2 = test_sizes
-    y2 = bal_acc_p_feature
 
     plt.figure(figsize=(12, 6))
 
@@ -721,29 +721,8 @@ def best_n_features(X, Y, params):
     plt.xticks(ticks=range(30, 51, 5))
     plt.legend()
 
-    plt.subplot(1, 2, 2)
-    plt.xlabel('Test Size')
-    plt.ylabel('Balanced Accuracy')
-    plt.title(f'Test Size for Feature {feature_number}')
-    plt.grid(True)
-    plt.plot(x2, y2, label='Test Sizes', color='blue')
-    plt.xticks(ticks=np.arange(0.1, 0.55, 0.05))
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-
     return feature_number, best_features, best_clf, best_scaler
 
-
-
-
-
-
-# Example usage (assuming `feature_selection` and `classification` functions are defined)
-# n_feature, feature_df = best_n_features(X_theta, Y)
-# print(f'Optimal number of features: {n_feature}')
-# print('DataFrame with selected features:')
-# print(feature_df)
 
 
 def grid_search(X,Y):
@@ -777,7 +756,7 @@ def grid_search(X,Y):
     return best_params
 
 
-
+######################################################################################################################
 from scipy import stats
 from sklearn.svm import SVC
 from sklearn.metrics import f1_score, precision_score, recall_score, balanced_accuracy_score

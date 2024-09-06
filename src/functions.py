@@ -544,13 +544,15 @@ def classification(i, X, Y, params, test_size):
     print("Std Specificity: {:.4f}".format(np.std(specificity)))
     print("Mean Balanced Accuracy: {:.4f}".format(np.mean(bal_acc)))
     print("Std Balanced Accuracy: {:.4f}".format(np.std(bal_acc)))
+    print('Mean F1 Score: {:.4f}'.format(np.mean(f1score)))
+    print('Mean Precision: {:.4f}'.format(np.mean(precision)))
     print("Mean R^2: {:.4f}".format(np.mean(r2_scores)))
     print("Std R^2: {:.4f}".format(np.std(r2_scores)))
     print("Mean ROC AUC: {:.4f}".format(np.mean(roc_auc_scores)))
     print("Std ROC AUC: {:.4f}".format(np.std(roc_auc_scores)))
     print('Confusion Matrix for one of the iterations:')
     cm=confusion_matrix(Y_test, Y_predicted)
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[0, 1])
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['Correct', 'Erroneous'])
     disp.plot(cmap=plt.cm.Blues)
     plt.title('Confusion Matrix')
     plt.show()
@@ -666,6 +668,81 @@ def calculate_redundancy(X):
             redundancy[j, i] = redundancy[i, j]
     return redundancy
 
+import joblib
+import numpy as np
+from sklearn import datasets, svm
+from sklearn.model_selection import cross_val_score, GridSearchCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+
+
+def training(X, Y, params):
+    """
+    Train a classifier using the given features and hyperparameters.
+
+    Parameters:
+    X (pd.DataFrame): The input feature matrix.
+    Y (pd.Series): The target vector.
+    params (dict): Parameters for the classifier.
+
+    Returns:
+    clf: The trained classifier.
+    """
+    # Create the SVM classifier
+    clf = SVC(class_weight='balanced', **params)
+    scaler=StandardScaler()
+
+    scores = cross_val_score(clf, X, Y, cv=5, scoring='balanced_accuracy')
+    # Train the classifier
+    clf.fit(X, Y)
+    scaler.fit(X)
+    # Save the trained classifier
+    trained_clf= joblib.dump(clf, 'trained_clf.pkl')
+    trained_scl= joblib.dump(scaler, 'trained_scl.pkl')
+
+    return trained_clf, trained_scl, scores.mean()
+
+def testing(X, Y):
+    """
+    Test a classifier using the given features.
+
+    Parameters:
+    X (pd.DataFrame): The input feature matrix.
+    Y (pd.Series): The target vector.
+
+    Returns:
+    float: The balanced accuracy of the classifier.
+    """
+    # Load the trained classifier
+    clf = joblib.load('trained_clf.pkl')
+    scaler=joblib.load('trained_scl.pkl')
+    # Test the classifier
+    X = scaler.transform(X)
+    Y_predicted = clf.predict(X)
+    bal_accuracy = balanced_accuracy_score(Y, Y_predicted)
+    return bal_accuracy
+
+#def feature_selection(X, Y, n_features, params):
+    """
+    Select the top x features based on the mRMR criterion.
+    
+    Parameters:
+    X (pd.DataFrame): The input feature matrix.
+    Y (pd.Series): The target vector.
+    
+    Returns:
+    pd.DataFrame: DataFrame containing the selected features.
+    """
+    # Select the top x features based on the mRMR criterion
+    selected_features = mrmr_classif(X, Y, n_features)
+    
+    # Create a DataFrame with the selected features 
+    selected_features_df = X[selected_features]
+    _,_,scores=training(selected_features_df, Y, params)
+    print(f'Balanced accuracy with {n_features} features: {scores:.4f}')
+
+    return selected_features_df, scores
+
 
 
 def best_n_features(X, Y, params):
@@ -715,13 +792,47 @@ def best_n_features(X, Y, params):
     plt.subplot(1, 2, 1)
     plt.xlabel('Number of features')
     plt.ylabel('Balanced Accuracy')
-    plt.title('Balanced Accuracy vs Number of Features')
+    plt.title('Balanced Accuracy for different number of features selected')
     plt.grid(True)
     plt.plot(x1, y1, label='Features', color='blue')
-    plt.xticks(ticks=range(30, 51, 5))
+    plt.xticks(ticks=range(1, 51, 5))
     plt.legend()
 
     return feature_number, best_features, best_clf, best_scaler
+
+from skopt import BayesSearchCV
+from sklearn.svm import SVC
+def grid_search_new(X,Y):
+    """
+    Perform grid search to find the best hyperparameters for the SVM classifier.
+
+    Parameters:
+    X (pd.DataFrame): The input feature matrix.
+    Y (pd.Series): The target vector.
+
+    Returns:
+    dict: A dictionary containing the best hyperparameters.
+    """
+    # Define the hyperparameters to search
+    param_grid = {
+        'C': (1e-2, 1e+2, 'log-uniform'),
+        'gamma': (1e-6, 1e+1, 'log-uniform'),
+        'kernel': ['rbf', 'linear']
+    }
+
+    # Create the SVM classifier
+    svm = SVC(class_weight='balanced')
+
+    opt = BayesSearchCV(estimator=svm,search_spaces=param_grid,n_iter=128,cv=5,random_state=42,verbose=3)
+
+# Fit the model
+    opt.fit(X, Y)
+    # Perform grid search
+    # Get the best hyperparameters
+    best_params = opt.best_params_
+
+    return best_params
+
 
 
 
@@ -817,3 +928,5 @@ def camila_feat_selection(X,Y):
     Xcol_sort = [x for _, x in sorted(zip(feat_ttest, X1.columns))]
     print(Xcol_sort)
     return Xcol_sort
+
+

@@ -5,7 +5,11 @@
 /dataset2_features.csv
 /dataset1_features.csv
 /best_theta_features1.txt
-/best_frequency_features.txt
-/best_temporal_features.txt
+/best_frequency_features1.txt
+/best_temporal_features1.txt
+/best_theta_features2.txt
+/best_frequency_features2.txt
+/best_temporal_features2.txt
 /best_all_features1.txt
 /best_all_features2.txt
+/channel_locations.ced
